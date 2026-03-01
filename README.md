@@ -528,8 +528,8 @@ _Erase. Reset. Reflash._
 
 <br>
 
-[![Star](https://img.shields.io/github/stars/mintfire/esp-burner?style=social)](https://github.com/mintfire/esp-burner)
-[![Fork](https://img.shields.io/github/forks/mintfire/esp-burner?style=social)](https://github.com/mintfire/esp-burner/fork)
+[![Star](https://img.shields.io/github/stars/mintfire/esp-burner?style=social)](https://github.com/avik-root/ESP-Burner/)
+[![Fork](https://img.shields.io/github/forks/mintfire/esp-burner?style=social)](https://github.com/avik-root/ESP-Burner/fork)
 
 <sub>© 2026 MintFire — All rights reserved.</sub>
 
