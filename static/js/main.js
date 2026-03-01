@@ -3,7 +3,7 @@
  * Developed by MintFire | v1.0.0
  *
  * Handles WebSocket communication, port management,
- * erase controls, and live terminal output.
+ * erase controls, live terminal output, and Browser USB mode.
  */
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -16,6 +16,7 @@ const state = {
     eraseMode: 'full',
     portPollInterval: null,
     wsConnected: false,
+    connectionMode: 'server', // 'server' or 'browser'
 };
 
 // ─── DOM Elements ───────────────────────────────────────────────────────────
@@ -50,6 +51,84 @@ const dom = {
     modalDetails: document.getElementById('modal-details'),
     modalCancel: document.getElementById('modal-cancel'),
     modalConfirm: document.getElementById('modal-confirm'),
+    // Mode toggle
+    modeServer: document.getElementById('mode-server'),
+    modeBrowser: document.getElementById('mode-browser'),
+    modeInfo: document.getElementById('mode-info'),
+    // Panels
+    serverPortsPanel: document.getElementById('server-ports-panel'),
+    browserUSBPanel: document.getElementById('browser-usb-panel'),
+    serverPortGroup: document.getElementById('server-port-group'),
+    browserPortGroup: document.getElementById('browser-port-group'),
+    serverAdvancedOptions: document.getElementById('server-advanced-options'),
+    // Browser USB buttons
+    btnBrowserConnect: document.getElementById('btn-browser-connect'),
+    btnBrowserDisconnect: document.getElementById('btn-browser-disconnect'),
+};
+
+// ─── Expose addTerminalLine globally for browser-serial.js ──────────────────
+window.addTerminalLine = addTerminalLine;
+
+// ─── Connection Mode Toggle ─────────────────────────────────────────────────
+function switchMode(mode) {
+    state.connectionMode = mode;
+
+    // Update toggle buttons
+    dom.modeServer.classList.toggle('active', mode === 'server');
+    dom.modeBrowser.classList.toggle('active', mode === 'browser');
+
+    // Toggle panels
+    if (mode === 'server') {
+        dom.serverPortsPanel.classList.remove('hidden');
+        dom.browserUSBPanel.classList.add('hidden');
+        dom.serverPortGroup.classList.remove('hidden');
+        dom.browserPortGroup.classList.add('hidden');
+        dom.serverAdvancedOptions.classList.remove('hidden');
+        dom.modeInfo.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>Using server-side serial port detection</span>';
+    } else {
+        dom.serverPortsPanel.classList.add('hidden');
+        dom.browserUSBPanel.classList.remove('hidden');
+        dom.serverPortGroup.classList.add('hidden');
+        dom.browserPortGroup.classList.remove('hidden');
+        dom.serverAdvancedOptions.classList.add('hidden');
+        dom.modeInfo.innerHTML = '<i class="fa-brands fa-usb"></i><span>Using browser Web Serial API — Chrome/Edge only</span>';
+    }
+
+    addTerminalLine(`[*] Switched to ${mode === 'server' ? 'Server' : 'Browser USB'} mode`, 'info');
+}
+
+dom.modeServer.addEventListener('click', () => switchMode('server'));
+dom.modeBrowser.addEventListener('click', () => switchMode('browser'));
+
+// ─── Browser USB button handlers ────────────────────────────────────────────
+if (dom.btnBrowserConnect) {
+    dom.btnBrowserConnect.addEventListener('click', async () => {
+        dom.btnBrowserConnect.disabled = true;
+        dom.btnBrowserConnect.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Connecting...</span>';
+
+        const success = await window.browserSerialConnect();
+
+        if (!success) {
+            dom.btnBrowserConnect.disabled = false;
+            dom.btnBrowserConnect.innerHTML = '<i class="fa-solid fa-plug-circle-bolt"></i><span>Connect ESP via USB</span>';
+        }
+    });
+}
+
+if (dom.btnBrowserDisconnect) {
+    dom.btnBrowserDisconnect.addEventListener('click', async () => {
+        await window.browserSerialDisconnect();
+        dom.btnBrowserConnect.disabled = false;
+        dom.btnBrowserConnect.innerHTML = '<i class="fa-solid fa-plug-circle-bolt"></i><span>Connect ESP via USB</span>';
+    });
+}
+
+// ─── Update board info from browser serial ──────────────────────────────────
+window.updateBrowserBoardInfo = function (info) {
+    state.boardInfo = info;
+    renderBoardInfo(info);
+    updateStats();
+    pulseStatCard('stat-chip');
 };
 
 // ─── REST API Fallback for Ports ────────────────────────────────────────────
@@ -106,7 +185,6 @@ function initSocket() {
         state.wsConnected = true;
         setConnectionStatus('connected', 'Connected');
         addTerminalLine('[*] WebSocket connected', 'success');
-        // Refresh ports immediately on reconnect
         state.socket.emit('request_ports');
     });
 
@@ -218,7 +296,6 @@ function renderPorts() {
         </div>
     `).join('');
 
-    // Attach connect button listeners
     dom.portsList.querySelectorAll('.btn-connect').forEach(btn => {
         btn.addEventListener('click', () => connectToPort(btn.dataset.port));
     });
@@ -258,11 +335,9 @@ function pulseStatCard(id) {
     }, 800);
 }
 
-// ─── Connect to Port ────────────────────────────────────────────────────────
+// ─── Connect to Port (Server Mode) ─────────────────────────────────────────
 async function connectToPort(portDevice) {
     addTerminalLine(`[*] Connecting to ${portDevice}...`, 'info');
-
-    // Set port in dropdown
     dom.erasePort.value = portDevice;
 
     try {
@@ -365,7 +440,6 @@ function addTerminalLine(message, type = 'info') {
     dom.terminalOutput.appendChild(line);
     dom.terminalOutput.scrollTop = dom.terminalOutput.scrollHeight;
 
-    // Limit lines to 500
     while (dom.terminalOutput.children.length > 500) {
         dom.terminalOutput.removeChild(dom.terminalOutput.firstChild);
     }
@@ -418,14 +492,12 @@ dom.advToggle.addEventListener('click', () => {
 
 // ─── Refresh Ports ──────────────────────────────────────────────────────────
 dom.btnRefreshPorts.addEventListener('click', async () => {
-    // Add spin animation
     const icon = dom.btnRefreshPorts.querySelector('i');
     icon.style.animation = 'spin 0.8s ease';
     dom.btnRefreshPorts.disabled = true;
 
     addTerminalLine('[*] Scanning for serial ports...', 'info');
 
-    // Try WebSocket first, then fall back to REST API
     let refreshed = false;
 
     if (state.wsConnected && state.socket) {
@@ -433,7 +505,6 @@ dom.btnRefreshPorts.addEventListener('click', async () => {
         refreshed = true;
     }
 
-    // Always also fetch via REST API as a reliable fallback
     const restResult = await fetchPortsViaREST();
     if (restResult) {
         refreshed = true;
@@ -458,13 +529,31 @@ dom.btnClearLog.addEventListener('click', () => {
 
 // ─── Erase Button ───────────────────────────────────────────────────────────
 dom.btnErase.addEventListener('click', () => {
+    if (state.connectionMode === 'browser') {
+        // Browser USB mode
+        if (!window.browserSerial || !window.browserSerial.connected) {
+            addTerminalLine('[!] Connect an ESP device via Browser USB first', 'warning');
+            return;
+        }
+
+        const baudRate = dom.eraseBaud.value;
+        let detailsHtml = `
+            <div><strong>Mode:</strong> Browser USB (Web Serial API)</div>
+            <div><strong>Device:</strong> ${window.browserSerial.chip || 'ESP Device'}</div>
+            <div><strong>Erase:</strong> ${state.eraseMode === 'full' ? 'Full Flash Erase' : 'Region Erase'}</div>`;
+
+        dom.modalDetails.innerHTML = detailsHtml;
+        dom.confirmModal.classList.remove('hidden');
+        return;
+    }
+
+    // Server mode
     const port = dom.erasePort.value;
     if (!port) {
         addTerminalLine('[!] Please select a port first', 'warning');
         return;
     }
 
-    // Build details for confirmation
     const baudRate = dom.eraseBaud.value;
     const beforeReset = dom.eraseBefore.value;
     const afterReset = dom.eraseAfter.value;
@@ -495,17 +584,21 @@ dom.modalCancel.addEventListener('click', () => {
 
 dom.modalConfirm.addEventListener('click', () => {
     dom.confirmModal.classList.add('hidden');
-    startErase();
+
+    if (state.connectionMode === 'browser') {
+        startBrowserErase();
+    } else {
+        startErase();
+    }
 });
 
-// Close modal on overlay click
 dom.confirmModal.addEventListener('click', (e) => {
     if (e.target === dom.confirmModal) {
         dom.confirmModal.classList.add('hidden');
     }
 });
 
-// ─── Start Erase ────────────────────────────────────────────────────────────
+// ─── Start Erase (Server Mode) ──────────────────────────────────────────────
 async function startErase() {
     const port = dom.erasePort.value;
     if (!port || state.isErasing) return;
@@ -514,7 +607,6 @@ async function startErase() {
     dom.btnErase.disabled = true;
     dom.btnErase.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>ERASING...</span>';
 
-    // Reset progress
     dom.progressContainer.classList.remove('hidden');
     dom.progressFill.style.width = '0%';
     dom.progressPercent.textContent = '0%';
@@ -553,6 +645,27 @@ async function startErase() {
     }
 }
 
+// ─── Start Erase (Browser USB Mode) ─────────────────────────────────────────
+async function startBrowserErase() {
+    if (state.isErasing) return;
+
+    state.isErasing = true;
+    dom.btnErase.disabled = true;
+    dom.btnErase.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>ERASING...</span>';
+
+    const success = await window.browserSerialErase();
+
+    state.isErasing = false;
+    dom.btnErase.disabled = false;
+    dom.btnErase.innerHTML = '<i class="fa-solid fa-fire"></i><span>ERASE FLASH</span>';
+
+    if (success) {
+        dom.progressFill.style.background = 'linear-gradient(90deg, var(--accent-green), #16a34a)';
+    } else {
+        dom.progressFill.style.background = 'linear-gradient(90deg, var(--accent-red), #dc2626)';
+    }
+}
+
 // ─── Add spin animation ─────────────────────────────────────────────────────
 const spinStyle = document.createElement('style');
 spinStyle.textContent = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
@@ -561,8 +674,6 @@ document.head.appendChild(spinStyle);
 // ─── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     initSocket();
-    // Start auto-polling ports via REST as a reliable fallback
     startPortPolling();
-    // Initial REST fetch
     fetchPortsViaREST();
 });
