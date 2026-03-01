@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Esp Burner — Professional ESP Board Memory Eraser by MintFire. Connect, manage, and erase ESP flash memory with advanced options.">
+    <meta name="author" content="MintFire">
+    <title>{{ app_name }} — {{ app_developer }}</title>
+
+    <link rel="icon" type="image/png" href="/static/img/favicon.png">
+    <link rel="apple-touch-icon" href="/static/img/logo.png">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- App Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- ─── Navbar ────────────────────────────────────────────────────── -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <img src="/static/img/logo.png" alt="Esp Burner Logo" class="navbar-logo">
+            <div class="navbar-title-group">
+                <h1 class="navbar-title">{{ app_name }}</h1>
+                <span class="navbar-subtitle">by {{ app_developer }}</span>
+            </div>
+        </div>
+        <div class="navbar-meta">
+            <span class="version-badge">
+                <i class="fa-solid fa-code-branch"></i> {{ app_version }}
+            </span>
+            <span class="status-indicator" id="ws-status" title="Server Connection">
+                <i class="fa-solid fa-circle"></i>
+                <span class="status-text">Connecting...</span>
+            </span>
+        </div>
+    </nav>
+
+    <!-- ─── Main Content ──────────────────────────────────────────────── -->
+    <main class="dashboard">
+
+        <!-- Stats Row -->
+        <section class="stats-row">
+            <div class="stat-card" id="stat-ports">
+                <div class="stat-icon"><i class="fa-solid fa-plug"></i></div>
+                <div class="stat-content">
+                    <span class="stat-value" id="stat-ports-count">0</span>
+                    <span class="stat-label">Ports Detected</span>
+                </div>
+            </div>
+            <div class="stat-card" id="stat-esp">
+                <div class="stat-icon accent-cyan"><i class="fa-solid fa-microchip"></i></div>
+                <div class="stat-content">
+                    <span class="stat-value" id="stat-esp-count">0</span>
+                    <span class="stat-label">ESP Devices</span>
+                </div>
+            </div>
+            <div class="stat-card" id="stat-chip">
+                <div class="stat-icon accent-green"><i class="fa-solid fa-memory"></i></div>
+                <div class="stat-content">
+                    <span class="stat-value" id="stat-chip-type">—</span>
+                    <span class="stat-label">Connected Chip</span>
+                </div>
+            </div>
+            <div class="stat-card" id="stat-flash">
+                <div class="stat-icon accent-purple"><i class="fa-solid fa-hard-drive"></i></div>
+                <div class="stat-content">
+                    <span class="stat-value" id="stat-flash-size">—</span>
+                    <span class="stat-label">Flash Size</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Grid -->
+        <div class="dashboard-grid">
+
+            <!-- ─── Connected Ports Panel ──────────────────────────── -->
+            <section class="panel ports-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-ethernet"></i> Connected Ports</h2>
+                    <button class="btn btn-sm btn-ghost" id="btn-refresh-ports" title="Refresh Ports">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+                <div class="panel-body">
+                    <div id="ports-list" class="ports-list">
+                        <div class="empty-state">
+                            <i class="fa-solid fa-plug-circle-xmark"></i>
+                            <p>No devices detected</p>
+                            <span>Connect an ESP board via USB</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── Board Information Panel ────────────────────────── -->
+            <section class="panel board-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-circle-info"></i> Board Information</h2>
+                </div>
+                <div class="panel-body">
+                    <div id="board-info-content" class="board-info">
+                        <div class="empty-state">
+                            <i class="fa-solid fa-microchip"></i>
+                            <p>No board connected</p>
+                            <span>Select a port and click Connect</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── Erase Control Panel ────────────────────────────── -->
+            <section class="panel erase-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-fire-flame-curved"></i> Erase Controls</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="erase-controls">
+                        <!-- Port Selection -->
+                        <div class="control-group">
+                            <label><i class="fa-solid fa-plug"></i> Target Port</label>
+                            <select id="erase-port" class="form-select">
+                                <option value="">— Select a port —</option>
+                            </select>
+                        </div>
+
+                        <!-- Baud Rate -->
+                        <div class="control-group">
+                            <label><i class="fa-solid fa-gauge-high"></i> Baud Rate</label>
+                            <select id="erase-baud" class="form-select">
+                                <option value="9600">9600</option>
+                                <option value="19200">19200</option>
+                                <option value="38400">38400</option>
+                                <option value="57600">57600</option>
+                                <option value="74880">74880</option>
+                                <option value="115200" selected>115200</option>
+                                <option value="230400">230400</option>
+                                <option value="460800">460800</option>
+                                <option value="921600">921600</option>
+                            </select>
+                        </div>
+
+                        <!-- Erase Mode -->
+                        <div class="control-group">
+                            <label><i class="fa-solid fa-eraser"></i> Erase Mode</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn active" data-mode="full" id="mode-full">
+                                    <i class="fa-solid fa-bomb"></i> Full Erase
+                                </button>
+                                <button class="toggle-btn" data-mode="region" id="mode-region">
+                                    <i class="fa-solid fa-crop-simple"></i> Region Erase
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Region Options (hidden by default) -->
+                        <div id="region-options" class="region-options hidden">
+                            <div class="control-group">
+                                <label><i class="fa-solid fa-location-dot"></i> Start Address (hex)</label>
+                                <input type="text" id="erase-start-addr" class="form-input"
+                                       placeholder="0x0000" value="0x0000">
+                            </div>
+                            <div class="control-group">
+                                <label><i class="fa-solid fa-ruler"></i> Size (bytes)</label>
+                                <input type="text" id="erase-size" class="form-input"
+                                       placeholder="0x1000" value="0x1000">
+                            </div>
+                        </div>
+
+                        <!-- Advanced Options Accordion -->
+                        <div class="accordion">
+                            <button class="accordion-toggle" id="adv-toggle">
+                                <i class="fa-solid fa-gear"></i> Advanced Options
+                                <i class="fa-solid fa-chevron-down accordion-arrow"></i>
+                            </button>
+                            <div class="accordion-content" id="adv-content">
+                                <div class="control-group">
+                                    <label><i class="fa-solid fa-arrow-right-to-bracket"></i> Before Reset</label>
+                                    <select id="erase-before" class="form-select">
+                                        <option value="default_reset" selected>Default Reset</option>
+                                        <option value="usb_reset">USB Reset</option>
+                                        <option value="no_reset">No Reset</option>
+                                        <option value="no_reset_no_sync">No Reset / No Sync</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label><i class="fa-solid fa-arrow-right-from-bracket"></i> After Reset</label>
+                                    <select id="erase-after" class="form-select">
+                                        <option value="hard_reset" selected>Hard Reset</option>
+                                        <option value="soft_reset">Soft Reset</option>
+                                        <option value="no_reset">No Reset</option>
+                                        <option value="no_reset_stub">No Reset (Stub)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div class="progress-container hidden" id="progress-container">
+                            <div class="progress-header">
+                                <span class="progress-label" id="progress-label">Preparing...</span>
+                                <span class="progress-percent" id="progress-percent">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
+                        </div>
+
+                        <!-- Erase Button -->
+                        <button class="btn btn-danger btn-erase" id="btn-erase">
+                            <i class="fa-solid fa-fire"></i>
+                            <span>ERASE FLASH</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── Live Terminal ──────────────────────────────────── -->
+            <section class="panel terminal-panel">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-terminal"></i> Live Terminal</h2>
+                    <button class="btn btn-sm btn-ghost" id="btn-clear-log" title="Clear Log">
+                        <i class="fa-solid fa-broom"></i>
+                    </button>
+                </div>
+                <div class="panel-body terminal-body">
+                    <div id="terminal-output" class="terminal-output">
+                        <div class="terminal-line info">
+                            <span class="terminal-timestamp"></span>
+                            <span class="terminal-text">[*] Esp Burner {{ app_version }} — Waiting for connection...</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- ─── Confirmation Modal ────────────────────────────────────────── -->
+    <div class="modal-overlay hidden" id="confirm-modal">
+        <div class="modal">
+            <div class="modal-icon">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3>Confirm Erase Operation</h3>
+            <p class="modal-desc">This will permanently erase the flash memory on the selected ESP board. This action <strong>cannot be undone</strong>.</p>
+            <div class="modal-details" id="modal-details"></div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="modal-cancel">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+                <button class="btn btn-danger" id="modal-confirm">
+                    <i class="fa-solid fa-fire"></i> Erase Now
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Footer ────────────────────────────────────────────────────── -->
+    <footer class="footer">
+        <div class="footer-content">
+            <span>
+                <img src="/static/img/favicon.png" alt="" class="footer-icon">
+                <strong>{{ app_name }}</strong> {{ app_version }}
+            </span>
+            <span class="footer-divider">|</span>
+            <span>Developed with <i class="fa-solid fa-heart" style="color: #ff6b35;"></i> by <strong>{{ app_developer }}</strong></span>
+            <span class="footer-divider">|</span>
+            <span><i class="fa-brands fa-github"></i> Open Source</span>
+        </div>
+    </footer>
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+
+    <!-- App Script -->
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
