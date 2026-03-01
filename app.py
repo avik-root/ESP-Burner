@@ -6,9 +6,21 @@ A Flask-based web application for connecting to ESP boards
 and erasing their flash memory with advanced options.
 """
 
-# Eventlet monkey-patching MUST come first before any other imports
-import eventlet
-eventlet.monkey_patch(os=True, select=True, socket=True, thread=True, time=True)
+# ─── Async Mode Auto-Detection ──────────────────────────────────────────────
+# Try gevent first (best production support), then eventlet, then threading
+ASYNC_MODE = None
+
+try:
+    from gevent import monkey
+    monkey.patch_all()
+    ASYNC_MODE = 'gevent'
+except (ImportError, Exception):
+    try:
+        import eventlet
+        eventlet.monkey_patch(os=True, select=True, socket=True, thread=True, time=True)
+        ASYNC_MODE = 'eventlet'
+    except (ImportError, AttributeError, Exception):
+        ASYNC_MODE = 'threading'
 
 import os
 import sys
@@ -24,7 +36,7 @@ import serial.tools.list_ports
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24).hex()
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode=ASYNC_MODE)
 
 # ─── Application Metadata ───────────────────────────────────────────────────
 APP_NAME = "Esp Burner"
@@ -70,13 +82,10 @@ def _is_likely_esp(port):
 
 
 def _run_esptool_command(args, timeout=30):
-    """Run an esptool command using subprocess and return output.
-    Uses the native subprocess module to avoid eventlet issues.
-    """
-    import subprocess as native_subprocess
+    """Run an esptool command using subprocess and return output."""
     cmd = [sys.executable, '-m', 'esptool'] + args
     try:
-        result = native_subprocess.run(
+        result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
@@ -90,7 +99,7 @@ def _run_esptool_command(args, timeout=30):
             'returncode': result.returncode,
             'success': result.returncode == 0
         }
-    except native_subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired:
         return {
             'stdout': '', 'stderr': 'Command timed out',
             'output': 'Command timed out', 'returncode': -1, 'success': False
@@ -264,7 +273,7 @@ def erase_flash_task(port_device, baud_rate=115200, erase_mode='full',
                 'message': f'[ESP] {line}',
                 'type': log_type
             })
-            socketio.sleep(0.05)  # small delay so the UI can show line-by-line
+            socketio.sleep(0.05)
 
         if result['success']:
             socketio.emit('erase_progress', {'progress': 100, 'status': 'completed'})
@@ -282,7 +291,6 @@ def erase_flash_task(port_device, baud_rate=115200, erase_mode='full',
                 'message': f'[FAIL] Erase failed (exit code {result["returncode"]})',
                 'type': 'error'
             })
-            # Show stderr specifically if present
             if result['stderr'].strip() and result['stderr'].strip() != result['stdout'].strip():
                 for err_line in result['stderr'].strip().split('\n'):
                     if err_line.strip():
@@ -340,7 +348,7 @@ def port_monitor():
             elif not known_ports:
                 known_ports = current_ports
 
-            socketio.sleep(2)  # use socketio.sleep instead of time.sleep
+            socketio.sleep(2)
         except Exception:
             socketio.sleep(5)
 
@@ -425,8 +433,7 @@ def api_erase():
     if erase_mode == 'region' and size <= 0:
         return jsonify({'success': False, 'error': 'Invalid region size'}), 400
 
-    # Use socketio.start_background_task — this is the proper way
-    # to run background work with Flask-SocketIO + eventlet
+    # Use socketio.start_background_task for proper async support
     socketio.start_background_task(
         erase_flash_task,
         port_device, baud_rate, erase_mode, start_addr, size,
@@ -446,6 +453,7 @@ def api_status():
         'is_erasing': is_erasing,
         'connected_port': connected_port,
         'board_info': board_info,
+        'async_mode': ASYNC_MODE,
     })
 
 
@@ -488,17 +496,19 @@ def handle_disconnect():
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5001))
     print(f"""
     ╔══════════════════════════════════════════════╗
     ║         Esp Burner {APP_VERSION}                  ║
     ║         Developed by {APP_DEVELOPER}              ║
     ║                                              ║
-    ║  Dashboard: http://localhost:5001             ║
+    ║  Dashboard: http://localhost:{port}             ║
+    ║  Async Mode: {ASYNC_MODE:<20}           ║
     ╚══════════════════════════════════════════════╝
     """)
 
     # Start port monitoring as a socketio background task
     socketio.start_background_task(port_monitor)
 
-    socketio.run(app, host='0.0.0.0', port=5001, debug=False,
+    socketio.run(app, host='0.0.0.0', port=port, debug=False,
                  use_reloader=False, log_output=True)
